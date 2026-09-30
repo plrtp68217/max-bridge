@@ -1,32 +1,34 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { useChat } from "../hooks/useChat";
-import { ROUTES } from "../router/paths";
 import { BackIcon } from "../components/ui/Icons";
+import { useChat } from "../context/chatContext";
 import "./AuthPage.css";
 
 function CreateChatPage() {
   const { createChat, chats } = useChat();
-
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
-
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-
     const digits = phone.replace(/\D/g, "");
 
-    // Номер в международном формате: код страны + номер, без плюса
     if (digits.length < 10 || digits.length > 15) {
       setError("Введите номер в международном формате, например 79001234567");
       return;
     }
 
     setError("");
-    createChat(digits);
-    navigate(ROUTES.CHAT);
+    setLoading(true);
+    try {
+      await createChat(digits);
+      navigate("/chat");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось проверить номер");
+      setLoading(false);
+    }
   };
 
   return (
@@ -36,7 +38,7 @@ function CreateChatPage() {
           <button
             type="button"
             className="auth__back"
-            onClick={() => navigate(ROUTES.CHAT)}
+            onClick={() => navigate("/chat")}
             aria-label="Назад к чатам"
           >
             <BackIcon />
@@ -44,9 +46,7 @@ function CreateChatPage() {
         )}
 
         <h1 className="auth__title">Новый чат</h1>
-        <p className="auth__subtitle">
-          Введите номер телефона получателя в международном формате.
-        </p>
+        <p className="auth__subtitle">Введите номер телефона получателя в международном формате.</p>
 
         <label className="auth__field">
           <span>Номер телефона</span>
@@ -62,8 +62,8 @@ function CreateChatPage() {
 
         {error && <p className="auth__error">{error}</p>}
 
-        <button type="submit" className="auth__submit">
-          Начать чат
+        <button type="submit" className="auth__submit" disabled={loading}>
+          {loading ? "Проверяем номер…" : "Начать чат"}
         </button>
       </form>
     </main>

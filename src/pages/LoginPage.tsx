@@ -1,20 +1,19 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { useChat } from "../hooks/useChat";
-import { ROUTES } from "../router/paths";
+import { useChat } from "../context/chatContext";
 import "./AuthPage.css";
 
 function LoginPage() {
-  const { credentials, isAuthorized, chats, login } = useChat();
+  const { isAuthorized, chats, login } = useChat();
 
-  const [idInstance, setIdInstance] = useState(credentials.idInstance);
-  const [apiTokenInstance, setApiTokenInstance] = useState(credentials.apiTokenInstance);
+  const [idInstance, setIdInstance] = useState("");
+  const [apiTokenInstance, setApiTokenInstance] = useState("");
   const [error, setError] = useState("");
 
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isAuthorized) navigate(chats.length ? ROUTES.CHAT : ROUTES.CREATE_CHAT, { replace: true });
+    if (isAuthorized) navigate(chats.length ? "/chat" : "/create-chat", { replace: true });
   }, [chats.length, isAuthorized, navigate]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {

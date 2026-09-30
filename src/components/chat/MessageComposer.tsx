@@ -6,10 +6,9 @@ const MAX_HEIGHT = 160;
 
 type MessageComposerProps = {
   onSend: (text: string) => void;
-  disabled?: boolean;
 };
 
-export function MessageComposer({ onSend, disabled }: MessageComposerProps) {
+export function MessageComposer({ onSend }: MessageComposerProps) {
   const [text, setText] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -24,7 +23,7 @@ export function MessageComposer({ onSend, disabled }: MessageComposerProps) {
 
   const submit = () => {
     const trimmed = text.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed) return;
 
     onSend(trimmed);
     setText("");
@@ -59,14 +58,13 @@ export function MessageComposer({ onSend, disabled }: MessageComposerProps) {
           onChange={(event) => setText(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Сообщение"
-          disabled={disabled}
           aria-label="Текст сообщения"
         />
 
         <button
           type="submit"
           className="composer__send"
-          disabled={disabled || text.trim().length === 0}
+          disabled={!text.trim()}
           aria-label="Отправить"
         >
           <SendIcon />

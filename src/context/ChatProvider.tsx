@@ -1,410 +1,215 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  deleteNotification,
-  getStateInstance,
-  receiveNotification,
-  sendMessage,
-} from "../api/greenapi";
-import { formatChatName, toChatId } from "../utils/format";
-import {
-  clearAll,
-  hasCredentials,
-  loadActiveChatId,
-  loadChats,
-  loadCredentials,
-  loadMessages,
-  saveActiveChatId,
-  saveChats,
-  saveCredentials,
-  saveMessages,
-} from "../utils/storage";
-import type {
-  Chat,
-  ChatMessage,
-  Credentials,
-  MessageData,
-  MessageStatus,
-  Notification,
-  WebhookBody,
-} from "../utils/types";
-import { ChatContext, type ChatContextValue, type Connection } from "./chatContext";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { checkAccount, deleteNotification, receiveNotification, sendMessage } from "../api/greenapi";
+import { formatPhone } from "../utils/format";
+import { clearAll, KEYS, load, save } from "../utils/storage";
+import type { Chat, ChatMessage, Credentials, MessageData, MessageStatus, WebhookBody } from "../utils/types";
+import { ChatContext, type ConnectionStatus } from "./chatContext";
 
-/** Сколько секунд держать открытым запрос к очереди уведомлений (long polling). */
-const RECEIVE_TIMEOUT_SECONDS = 10;
+/** Статусы приходят не по порядку — понижать уже достигнутый нельзя. */
+const STATUS_ORDER: MessageStatus[] = ["failed", "pending", "sent", "delivered", "read"];
 
-/** Пауза перед повторной попыткой после сетевой ошибки. */
-const RETRY_DELAY_MS = 5000;
-
-function delay(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
-  });
-}
-
-/** Достаёт текст из messageData; нетекстовые типы помечаются как неподдерживаемые. */
-function extractText(messageData: MessageData): { text: string; unsupported: boolean } {
-  if (messageData.typeMessage === "textMessage") {
-    return { text: messageData.textMessageData?.textMessage ?? "", unsupported: false };
-  }
-
-  if (messageData.typeMessage === "extendedTextMessage") {
-    const data = messageData.extendedTextMessageData;
-    return { text: data?.text ?? data?.description ?? "", unsupported: false };
-  }
-
-  return { text: "Сообщение этого типа не поддерживается", unsupported: true };
-}
-
-function toMessageStatus(status: string): MessageStatus {
-  switch (status) {
-    case "sent":
-    case "delivered":
-    case "read":
-      return status;
+function extractText(data: MessageData): { text: string; unsupported?: boolean } {
+  switch (data.typeMessage) {
+    case "textMessage":
+      return { text: data.textMessageData?.textMessage ?? "" };
+    case "extendedTextMessage":
+    case "quotedMessage":
+      return { text: data.extendedTextMessageData?.text ?? "" };
     default:
-      return "failed";
+      return { text: "Сообщение этого типа не поддерживается", unsupported: true };
   }
 }
-
-const OFFLINE: Connection = { status: "offline" };
-
-/** Статусы приходят не по порядку — понижать достигнутый нельзя. */
-const STATUS_WEIGHT: Record<MessageStatus, number> = {
-  failed: 0,
-  pending: 1,
-  sent: 2,
-  delivered: 3,
-  read: 4,
-};
 
 export function ChatProvider({ children }: { children: ReactNode }) {
-  const [credentials, setCredentials] = useState<Credentials>(loadCredentials);
-  const [chats, setChats] = useState<Chat[]>(loadChats);
-  const [messages, setMessages] = useState<Record<string, ChatMessage[]>>(loadMessages);
-  const [activeChatId, setActiveChatId] = useState<string>(loadActiveChatId);
-  const [connection, setConnection] = useState<Connection>({ status: "offline" });
+  const [credentials, setCredentials] = useState(() => load<Credentials | null>(KEYS.credentials, null));
+  const [chats, setChats] = useState(() => load<Chat[]>(KEYS.chats, []));
+  const [messages, setMessages] = useState(() => load<Record<string, ChatMessage[]>>(KEYS.messages, {}));
+  const [activeChatId, setActiveChatId] = useState(() => load(KEYS.activeChatId, ""));
+  const [connection, setConnection] = useState<ConnectionStatus>("connecting");
 
-  /** Даёт циклу опроса доступ к актуальному чату без его перезапуска. */
+  // Цикл опроса живёт дольше одного рендера — актуальный чат читает через ref
   const activeChatIdRef = useRef(activeChatId);
-
-  const isAuthorized = hasCredentials(credentials);
 
   useEffect(() => {
     activeChatIdRef.current = activeChatId;
+    save(KEYS.activeChatId, activeChatId);
   }, [activeChatId]);
+  useEffect(() => save(KEYS.chats, chats), [chats]);
+  useEffect(() => save(KEYS.messages, messages), [messages]);
 
-  useEffect(() => saveChats(chats), [chats]);
-  useEffect(() => saveMessages(messages), [messages]);
-  useEffect(() => saveActiveChatId(activeChatId), [activeChatId]);
-
-  /* ---------- Мутации состояния ---------- */
-
-  const upsertChat = useCallback((chatId: string, incrementUnread: boolean) => {
-    setChats((previous) => {
-      const existing = previous.find((chat) => chat.id === chatId);
-
-      if (!existing) {
-        return [
-          ...previous,
-          {
-            id: chatId,
-            name: formatChatName(chatId),
-            createdAt: Date.now(),
-            unreadCount: incrementUnread ? 1 : 0,
-          },
-        ];
-      }
-
-      if (!incrementUnread) return previous;
-
-      return previous.map((chat) =>
-        chat.id === chatId ? { ...chat, unreadCount: chat.unreadCount + 1 } : chat,
-      );
-    });
-  }, []);
-
-  /** Добавляет сообщение, игнорируя повторы по idMessage. */
-  const appendMessage = useCallback((message: ChatMessage) => {
-    setMessages((previous) => {
-      const list = previous[message.chatId] ?? [];
-
-      if (list.some((item) => item.id === message.id)) return previous;
-
-      const next = [...list, message].sort((a, b) => a.timestamp - b.timestamp);
-
-      return { ...previous, [message.chatId]: next };
-    });
-  }, []);
-
-  const updateMessage = useCallback(
-    (chatId: string, messageId: string, patch: Partial<ChatMessage>) => {
-      setMessages((previous) => {
-        const list = previous[chatId];
-        if (!list) return previous;
-
-        const next = list.map((item) => (item.id === messageId ? { ...item, ...patch } : item));
-
-        // Если вебхук об этом же сообщении успел прийти раньше ответа sendMessage,
-        // после подстановки idMessage в списке окажется два одинаковых id
-        const deduped = next.filter(
-          (item, index) => next.findIndex((other) => other.id === item.id) === index,
-        );
-
-        return { ...previous, [chatId]: deduped };
-      });
-    },
-    [],
-  );
-
-  /* ---------- Обработка уведомлений ---------- */
-
-  const handleWebhook = useCallback(
-    (body: WebhookBody) => {
-      switch (body.typeWebhook) {
-        case "incomingMessageReceived":
-        case "outgoingMessageReceived":
-        case "outgoingAPIMessageReceived": {
-          const chatId = body.senderData.chatId;
-
-          // Групповые чаты приложение не поддерживает
-          if (!chatId.endsWith("@c.us")) return;
-
-          const { text, unsupported } = extractText(body.messageData);
-          if (!text) return;
-
-          const incoming = body.typeWebhook === "incomingMessageReceived";
-
-          upsertChat(chatId, incoming && activeChatIdRef.current !== chatId);
-
-          appendMessage({
-            id: body.idMessage,
-            chatId,
-            direction: incoming ? "incoming" : "outgoing",
-            text,
-            timestamp: body.timestamp * 1000,
-            status: incoming ? "read" : "sent",
-            unsupported,
-          });
-          return;
-        }
-
-        case "outgoingMessageStatus": {
-          const status = toMessageStatus(body.status);
-
-          setMessages((previous) => {
-            const list = previous[body.chatId];
-            if (!list) return previous;
-
-            let changed = false;
-
-            const next = list.map((item) => {
-              if (item.id !== body.idMessage) return item;
-              if (STATUS_WEIGHT[status] <= STATUS_WEIGHT[item.status]) return item;
-
-              changed = true;
-              return { ...item, status };
-            });
-
-            return changed ? { ...previous, [body.chatId]: next } : previous;
-          });
-          return;
-        }
-
-        default:
-          // stateInstanceChanged, deviceInfo и прочее приложению не нужны
-          return;
-      }
-    },
-    [appendMessage, upsertChat],
-  );
-
-  /* ---------- Цикл получения сообщений ---------- */
+  /* ---------- Получение уведомлений ---------- */
 
   useEffect(() => {
-    if (!hasCredentials(credentials)) return;
+    if (!credentials) return;
+
+    const handle = (body: WebhookBody) => {
+      if (body.typeWebhook === "outgoingMessageStatus") {
+        const status = body.status as MessageStatus;
+        if (!body.chatId || !["sent", "delivered", "read"].includes(status)) return;
+
+        setMessages((prev) => {
+          const list = prev[body.chatId!];
+          const target = list?.find((m) => m.id === body.idMessage);
+          if (!target || STATUS_ORDER.indexOf(status) <= STATUS_ORDER.indexOf(target.status)) return prev;
+          return { ...prev, [body.chatId!]: list.map((m) => (m === target ? { ...m, status } : m)) };
+        });
+        return;
+      }
+
+      // outgoingAPIMessageReceived не обрабатываем: это наши же отправки, они уже в ленте
+      const incoming = body.typeWebhook === "incomingMessageReceived";
+      if (!incoming && body.typeWebhook !== "outgoingMessageReceived") return;
+
+      const { senderData: sender, messageData, idMessage } = body;
+      // Отрицательный chatId — групповой чат, их не поддерживаем
+      if (!sender || !messageData || !idMessage || sender.chatId.startsWith("-")) return;
+
+      const chatId = sender.chatId;
+      const { text, unsupported } = extractText(messageData);
+      if (!text) return;
+
+      const unread = incoming && activeChatIdRef.current !== chatId ? 1 : 0;
+      setChats((prev) => {
+        if (!prev.some((c) => c.id === chatId)) {
+          const name = sender.chatName || sender.senderName || chatId;
+          return [...prev, { id: chatId, name, createdAt: Date.now(), unreadCount: unread }];
+        }
+        return unread
+          ? prev.map((c) => (c.id === chatId ? { ...c, unreadCount: c.unreadCount + 1 } : c))
+          : prev;
+      });
+
+      const message: ChatMessage = {
+        id: idMessage,
+        chatId,
+        direction: incoming ? "incoming" : "outgoing",
+        text,
+        timestamp: body.timestamp * 1000,
+        status: incoming ? "read" : "sent",
+        unsupported,
+      };
+
+      setMessages((prev) => {
+        const list = prev[chatId] ?? [];
+        if (list.some((m) => m.id === message.id)) return prev;
+        return { ...prev, [chatId]: [...list, message].sort((a, b) => a.timestamp - b.timestamp) };
+      });
+    };
 
     const controller = new AbortController();
-    let cancelled = false;
 
-    const poll = async () => {
-      setConnection({ status: "connecting" });
-
-      try {
-        const state = await getStateInstance(credentials);
-        if (cancelled) return;
-
-        setConnection(
-          state.stateInstance === "authorized"
-            ? { status: "online" }
-            : { status: "error", detail: `Инстанс: ${state.stateInstance}` },
-        );
-      } catch {
-        if (cancelled) return;
-        setConnection({ status: "error", detail: "Не удалось проверить инстанс" });
-      }
-
-      while (!cancelled) {
+    (async () => {
+      while (!controller.signal.aborted) {
         try {
-          const notification: Notification | null = await receiveNotification(
-            credentials,
-            RECEIVE_TIMEOUT_SECONDS,
-            controller.signal,
-          );
-
-          if (cancelled) return;
-
-          setConnection((current) => (current.status === "online" ? current : { status: "online" }));
-
+          const notification = await receiveNotification(credentials, controller.signal);
+          setConnection("online");
           if (!notification) continue;
 
-          handleWebhook(notification.body);
-
-          // Пока уведомление не удалено, очередь не отдаст следующее
+          try {
+            handle(notification.body);
+          } catch (error) {
+            console.error("Не удалось обработать уведомление", notification, error);
+          }
+          // Удаляем даже необработанное, иначе одно «кривое» уведомление заблокирует очередь
           await deleteNotification(credentials, notification.receiptId);
-        } catch (error) {
-          if (cancelled || controller.signal.aborted) return;
-
-          setConnection({
-            status: "error",
-            detail: error instanceof Error ? error.message : "Ошибка соединения",
-          });
-
-          await delay(RETRY_DELAY_MS, controller.signal);
+        } catch {
+          if (controller.signal.aborted) return;
+          setConnection("error");
+          await new Promise((resolve) => setTimeout(resolve, 5000));
         }
       }
-    };
+    })();
 
-    void poll();
-
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [credentials, handleWebhook]);
+    return () => controller.abort();
+  }, [credentials]);
 
   /* ---------- Действия ---------- */
 
-  const login = useCallback((next: Credentials) => {
-    saveCredentials(next);
+  const login = (next: Credentials) => {
+    save(KEYS.credentials, next);
+    setConnection("connecting");
     setCredentials(next);
-  }, []);
+  };
 
-  const logout = useCallback(() => {
+  const logout = () => {
     clearAll();
-    setCredentials({ idInstance: "", apiTokenInstance: "" });
+    setCredentials(null);
     setChats([]);
     setMessages({});
     setActiveChatId("");
-  }, []);
+  };
 
-  const openChat = useCallback((chatId: string) => {
+  const openChat = (chatId: string) => {
     setActiveChatId(chatId);
-    setChats((previous) =>
-      previous.map((chat) => (chat.id === chatId ? { ...chat, unreadCount: 0 } : chat)),
+    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
+  };
+
+  const createChat = async (phone: string) => {
+    const chatId = await checkAccount(credentials!, phone);
+    if (!chatId) throw new Error("Этот номер не зарегистрирован в MAX");
+
+    setChats((prev) =>
+      prev.some((c) => c.id === chatId)
+        ? prev
+        : [...prev, { id: chatId, name: formatPhone(phone), createdAt: Date.now(), unreadCount: 0 }],
     );
-  }, []);
+    openChat(chatId);
+  };
 
-  const createChat = useCallback(
-    (phone: string) => {
-      const chatId = toChatId(phone);
-      upsertChat(chatId, false);
-      openChat(chatId);
-      return chatId;
-    },
-    [openChat, upsertChat],
-  );
-
-  const removeChat = useCallback((chatId: string) => {
-    setChats((previous) => previous.filter((chat) => chat.id !== chatId));
-    setMessages((previous) => {
-      const next = { ...previous };
+  const removeChat = (chatId: string) => {
+    setChats((prev) => prev.filter((c) => c.id !== chatId));
+    setMessages((prev) => {
+      const next = { ...prev };
       delete next[chatId];
       return next;
     });
-    setActiveChatId((current) => (current === chatId ? "" : current));
-  }, []);
+    if (activeChatId === chatId) setActiveChatId("");
+  };
 
-  const sendText = useCallback(
-    async (text: string) => {
-      const chatId = activeChatIdRef.current;
-      const trimmed = text.trim();
+  const sendText = async (text: string) => {
+    const chatId = activeChatId;
+    // Оптимистичное сообщение: показываем сразу, id заменим ответом сервера
+    const localId = `local-${Date.now()}`;
+    const update = (patch: Partial<ChatMessage>) =>
+      setMessages((prev) => ({
+        ...prev,
+        [chatId]: prev[chatId].map((m) => (m.id === localId ? { ...m, ...patch } : m)),
+      }));
 
-      if (!chatId || !trimmed) return;
+    setMessages((prev) => ({
+      ...prev,
+      [chatId]: [
+        ...(prev[chatId] ?? []),
+        { id: localId, chatId, direction: "outgoing", text, timestamp: Date.now(), status: "pending" },
+      ],
+    }));
 
-      // Оптимистичное сообщение: показываем сразу, id заменим ответом сервера
-      const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    try {
+      update({ id: await sendMessage(credentials!, chatId, text), status: "sent" });
+    } catch {
+      update({ status: "failed" });
+    }
+  };
 
-      appendMessage({
-        id: localId,
-        chatId,
-        direction: "outgoing",
-        text: trimmed,
-        timestamp: Date.now(),
-        status: "pending",
-      });
+  const lastActivity = (chat: Chat) => messages[chat.id]?.at(-1)?.timestamp ?? chat.createdAt;
 
-      try {
-        const { idMessage } = await sendMessage(credentials, { chatId, message: trimmed });
-        updateMessage(chatId, localId, { id: idMessage, status: "sent" });
-      } catch {
-        updateMessage(chatId, localId, { status: "failed" });
-      }
-    },
-    [appendMessage, credentials, updateMessage],
+  return (
+    <ChatContext.Provider
+      value={{
+        isAuthorized: credentials !== null,
+        chats: [...chats].sort((a, b) => lastActivity(b) - lastActivity(a)),
+        messages,
+        activeChat: chats.find((c) => c.id === activeChatId) ?? null,
+        connection,
+        login,
+        logout,
+        openChat,
+        createChat,
+        removeChat,
+        sendText,
+      }}
+    >
+      {children}
+    </ChatContext.Provider>
   );
-
-  /* ---------- Значение контекста ---------- */
-
-  const sortedChats = useMemo(() => {
-    const lastActivity = (chat: Chat) => {
-      const list = messages[chat.id];
-      return list?.length ? list[list.length - 1].timestamp : chat.createdAt;
-    };
-
-    return [...chats].sort((a, b) => lastActivity(b) - lastActivity(a));
-  }, [chats, messages]);
-
-  const value = useMemo<ChatContextValue>(
-    () => ({
-      credentials,
-      isAuthorized,
-      chats: sortedChats,
-      messages,
-      activeChatId,
-      activeChat: chats.find((chat) => chat.id === activeChatId) ?? null,
-      connection: isAuthorized ? connection : OFFLINE,
-      login,
-      logout,
-      openChat,
-      createChat,
-      removeChat,
-      sendText,
-    }),
-    [
-      activeChatId,
-      chats,
-      connection,
-      createChat,
-      credentials,
-      isAuthorized,
-      login,
-      logout,
-      messages,
-      openChat,
-      removeChat,
-      sendText,
-      sortedChats,
-    ],
-  );
-
-  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
 }

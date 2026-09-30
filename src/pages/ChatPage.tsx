@@ -1,23 +1,16 @@
-import { useNavigate } from "react-router-dom";
 import { ChatPanel } from "../components/chat/ChatPanel";
 import { NavRail } from "../components/sidebar/NavRail";
 import { Sidebar } from "../components/sidebar/Sidebar";
-import { useChat } from "../hooks/useChat";
-import { ROUTES } from "../router/paths";
+import { useChat } from "../context/chatContext";
 import "./ChatPage.css";
 
 function ChatPage() {
-  const { logout, activeChatId } = useChat();
-  const navigate = useNavigate();
+  const { logout, activeChat } = useChat();
 
-  const handleLogout = () => {
-    logout();
-    navigate(ROUTES.LOGIN, { replace: true });
-  };
-
+  // После logout RequireAuth сам перенаправит на /login
   return (
-    <div className={`workspace${activeChatId ? " workspace--chat-open" : ""}`}>
-      <NavRail onLogout={handleLogout} />
+    <div className={`workspace${activeChat ? " workspace--chat-open" : ""}`}>
+      <NavRail onLogout={logout} />
       <Sidebar />
       <ChatPanel />
     </div>

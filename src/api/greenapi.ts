@@ -1,96 +1,56 @@
-import type {
-  Credentials,
-  DeleteNotificationResponse,
-  Notification,
-  SendMessageRequest,
-  SendMessageResponse,
-  StateInstanceResponse,
-} from "../utils/types";
+import type { Credentials, Notification } from "../utils/types";
 
 const BASE_URL = "https://api.green-api.com";
 
-export class GreenApiError extends Error {
-  readonly status: number;
+type CallOptions = { path?: string; body?: unknown; method?: string; signal?: AbortSignal };
 
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "GreenApiError";
-    this.status = status;
-  }
-}
-
-function methodUrl(credentials: Credentials, method: string, path = ""): string {
-  return `${BASE_URL}/waInstance${credentials.idInstance}/${method}/${credentials.apiTokenInstance}${path}`;
-}
-
-/**
- * Обёртка над fetch: приводит HTTP-ошибки к GreenApiError и разбирает тело,
- * которое у GREEN-API может быть пустым (например, у receiveNotification).
- */
-async function request<T>(url: string, init?: RequestInit): Promise<T | null> {
-  const response = await fetch(url, init);
+async function call<T>(
+  { idInstance, apiTokenInstance }: Credentials,
+  method: string,
+  { path = "", body, ...init }: CallOptions = {},
+): Promise<T | null> {
+  const response = await fetch(
+    `${BASE_URL}/waInstance${idInstance}/${method}/${apiTokenInstance}${path}`,
+    body === undefined
+      ? init
+      : { ...init, method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+  );
 
   const raw = await response.text();
+  if (!response.ok) throw new Error(raw || `${method}: HTTP ${response.status}`);
 
-  if (!response.ok) {
-    throw new GreenApiError(
-      raw || `Запрос завершился с кодом ${response.status}`,
-      response.status,
-    );
-  }
-
-  if (!raw.trim()) return null;
-
-  return JSON.parse(raw) as T;
+  // receiveNotification отвечает пустым телом, если очередь пуста
+  return raw.trim() ? (JSON.parse(raw) as T) : null;
 }
 
-export async function sendMessage(
-  credentials: Credentials,
-  messageRequest: SendMessageRequest,
-): Promise<SendMessageResponse> {
-  const result = await request<SendMessageResponse>(methodUrl(credentials, "sendMessage"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(messageRequest),
+export async function sendMessage(credentials: Credentials, chatId: string, message: string) {
+  const result = await call<{ idMessage: string }>(credentials, "sendMessage", {
+    body: { chatId, message },
   });
-
-  if (!result?.idMessage) {
-    throw new GreenApiError("Сервер не вернул идентификатор сообщения", 200);
-  }
-
-  return result;
+  if (!result?.idMessage) throw new Error("Сервер не вернул idMessage");
+  return result.idMessage;
 }
 
 /**
- * Длинный опрос очереди входящих уведомлений.
- * Возвращает null, если за время receiveTimeout ничего не пришло.
+ * В MAX chatId собеседника — внутренний id, а не номер телефона.
+ * Входящие приходят именно с ним, поэтому чат нужно создавать по этому id.
  */
-export async function receiveNotification(
-  credentials: Credentials,
-  receiveTimeout = 10,
-  signal?: AbortSignal,
-): Promise<Notification | null> {
-  return request<Notification>(
-    methodUrl(credentials, "receiveNotification", `?receiveTimeout=${receiveTimeout}`),
-    { signal },
-  );
+export async function checkAccount(credentials: Credentials, phone: string) {
+  const result = await call<{ exist: boolean; chatId: string }>(credentials, "checkAccount", {
+    body: { phoneNumber: Number(phone) },
+  });
+  return result?.exist && result.chatId ? result.chatId : null;
 }
 
-/** Уведомление нужно удалить из очереди, иначе оно придёт повторно. */
-export async function deleteNotification(
-  credentials: Credentials,
-  receiptId: number,
-): Promise<DeleteNotificationResponse | null> {
-  return request<DeleteNotificationResponse>(
-    methodUrl(credentials, "deleteNotification", `/${receiptId}`),
-    { method: "DELETE" },
-  );
+/** Long polling очереди уведомлений; null — за timeout ничего не пришло. */
+export function receiveNotification(credentials: Credentials, signal: AbortSignal) {
+  return call<Notification>(credentials, "receiveNotification", {
+    path: "?receiveTimeout=20",
+    signal,
+  });
 }
 
-export async function getStateInstance(credentials: Credentials): Promise<StateInstanceResponse> {
-  const result = await request<StateInstanceResponse>(methodUrl(credentials, "getStateInstance"));
-
-  if (!result) throw new GreenApiError("Пустой ответ getStateInstance", 200);
-
-  return result;
+/** Пока уведомление не удалено, очередь не отдаст следующее. */
+export function deleteNotification(credentials: Credentials, receiptId: number) {
+  return call(credentials, "deleteNotification", { path: `/${receiptId}`, method: "DELETE" });
 }

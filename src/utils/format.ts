@@ -1,31 +1,15 @@
-const CHAT_ID_POSTFIX = "@c.us";
-
-/** 79208036508 -> 79208036508@c.us */
-export function toChatId(phone: string): string {
-  return `${phone.replace(/\D/g, "")}${CHAT_ID_POSTFIX}`;
-}
-
-/** 79208036508@c.us -> 79208036508 */
-export function toPhone(chatId: string): string {
-  return chatId.replace(/@.+$/, "");
-}
-
-/** 79208036508@c.us -> +7 920 803-65-08 */
-export function formatChatName(chatId: string): string {
-  const digits = toPhone(chatId);
-
+/** 79001234567 -> +7 900 123-45-67 */
+export function formatPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
   const russian = /^7(\d{3})(\d{3})(\d{2})(\d{2})$/.exec(digits);
-  if (russian) {
-    const [, code, a, b, c] = russian;
-    return `+7 ${code} ${a}-${b}-${c}`;
-  }
-
-  return digits ? `+${digits}` : chatId;
+  return russian ? `+7 ${russian[1]} ${russian[2]}-${russian[3]}-${russian[4]}` : `+${digits}`;
 }
 
+/** "Иван Петров" -> "ИП", "+7 900 123-45-67" -> "67" */
 export function initialsOf(name: string): string {
-  const letters = name.replace(/[^\p{L}\p{N}]/gu, "");
-  return letters.slice(-2).toUpperCase() || "?";
+  const words = name.split(/\s+/).filter((word) => /\p{L}/u.test(word));
+  if (!words.length) return name.replace(/\D/g, "").slice(-2) || "?";
+  return words.slice(0, 2).map((word) => word.match(/\p{L}/u)![0]).join("").toUpperCase();
 }
 
 /** Устойчивый выбор цвета аватара по chatId. */

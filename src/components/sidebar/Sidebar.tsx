@@ -1,51 +1,43 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useChat } from "../../hooks/useChat";
-import { ROUTES } from "../../router/paths";
-import { toPhone } from "../../utils/format";
+import { useChat } from "../../context/chatContext";
 import { PlusIcon, SearchIcon } from "../ui/Icons";
 import { ChatListItem } from "./ChatListItem";
 import "./Sidebar.css";
 
 const CONNECTION_LABEL = {
-  offline: "Не подключено",
   connecting: "Подключение…",
   online: "На связи",
   error: "Нет соединения",
 } as const;
 
 export function Sidebar() {
-  const { chats, messages, activeChatId, openChat, removeChat, connection } = useChat();
+  const { chats, messages, activeChat, openChat, removeChat, connection } = useChat();
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
 
-  const visibleChats = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return chats;
-
-    const digits = normalized.replace(/\D/g, "");
-
-    return chats.filter(
-      (chat) =>
-        chat.name.toLowerCase().includes(normalized) ||
-        (digits.length > 0 && toPhone(chat.id).includes(digits)),
-    );
-  }, [chats, query]);
+  const normalized = query.trim().toLowerCase();
+  const digits = normalized.replace(/\D/g, "");
+  const visibleChats = chats.filter(
+    (chat) =>
+      chat.name.toLowerCase().includes(normalized) ||
+      (digits.length > 0 && chat.name.replace(/\D/g, "").includes(digits)),
+  );
 
   return (
     <aside className="sidebar">
       <header className="sidebar__header">
         <h1 className="sidebar__title">Чаты</h1>
 
-        <span className={`sidebar__status sidebar__status--${connection.status}`}>
+        <span className={`sidebar__status sidebar__status--${connection}`}>
           <i />
-          {CONNECTION_LABEL[connection.status]}
+          {CONNECTION_LABEL[connection]}
         </span>
 
         <button
           type="button"
           className="sidebar__add"
-          onClick={() => navigate(ROUTES.CREATE_CHAT)}
+          onClick={() => navigate("/create-chat")}
           title="Новый чат"
           aria-label="Новый чат"
         >
@@ -73,7 +65,7 @@ export function Sidebar() {
               key={chat.id}
               chat={chat}
               lastMessage={list?.[list.length - 1]}
-              isActive={chat.id === activeChatId}
+              isActive={chat.id === activeChat?.id}
               onSelect={() => openChat(chat.id)}
               onRemove={() => removeChat(chat.id)}
             />

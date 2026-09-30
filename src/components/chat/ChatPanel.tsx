@@ -1,4 +1,4 @@
-import { useChat } from "../../hooks/useChat";
+import { useChat } from "../../context/chatContext";
 import { ChatsIcon } from "../ui/Icons";
 import { ChatHeader } from "./ChatHeader";
 import { MessageComposer } from "./MessageComposer";
@@ -6,7 +6,6 @@ import { MessageList } from "./MessageList";
 import "./ChatPanel.css";
 
 const SUBTITLE = {
-  offline: "нет подключения",
   connecting: "подключение…",
   online: "в сети",
   error: "нет соединения",
@@ -30,7 +29,7 @@ export function ChatPanel() {
     <section className="chat-panel">
       <ChatHeader
         chat={activeChat}
-        subtitle={connection.detail ?? SUBTITLE[connection.status]}
+        subtitle={SUBTITLE[connection]}
         onBack={() => openChat("")}
       />
 

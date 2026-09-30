@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
-import { EmojiIcon, SendIcon } from "../ui/Icons";
+import { SendIcon } from "../ui/Icons";
 import "./MessageComposer.css";
 
 const MAX_HEIGHT = 160;
@@ -47,10 +47,6 @@ export function MessageComposer({ onSend }: MessageComposerProps) {
       }}
     >
       <div className="composer__field">
-        <button type="button" className="composer__icon" disabled title="Недоступно в демо" aria-label="Эмодзи">
-          <EmojiIcon />
-        </button>
-
         <textarea
           ref={textareaRef}
           rows={1}

@@ -5,16 +5,13 @@ export type ConnectionStatus = "connecting" | "online" | "error";
 
 export type ChatContextValue = {
   isAuthorized: boolean;
-  chats: Chat[];
-  messages: Record<string, ChatMessage[]>;
-  activeChat: Chat | null;
+  chat: Chat | null;
+  messages: ChatMessage[];
   connection: ConnectionStatus;
   login: (credentials: Credentials) => void;
   logout: () => void;
-  openChat: (chatId: string) => void;
   /** Бросает ошибку, если номер не зарегистрирован в MAX */
-  createChat: (phone: string) => Promise<void>;
-  removeChat: (chatId: string) => void;
+  startChat: (phone: string) => Promise<void>;
   sendText: (text: string) => Promise<void>;
 };
 

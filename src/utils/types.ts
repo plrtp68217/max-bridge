@@ -8,7 +8,6 @@ export type MessageStatus = "pending" | "sent" | "delivered" | "read" | "failed"
 export type ChatMessage = {
   /** idMessage из GREEN-API — используется для дедупликации */
   id: string;
-  chatId: string;
   direction: "incoming" | "outgoing";
   text: string;
   /** Время в миллисекундах */
@@ -22,8 +21,6 @@ export type Chat = {
   /** chatId пользователя в MAX (не номер телефона), например "10000000" */
   id: string;
   name: string;
-  createdAt: number;
-  unreadCount: number;
 };
 
 /* ---------- Уведомления GREEN-API (receiveNotification) ---------- */

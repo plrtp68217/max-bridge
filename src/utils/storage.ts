@@ -1,9 +1,8 @@
 /** Все данные приложения лежат в localStorage под этими ключами. */
 export const KEYS = {
   credentials: "maxbridge.credentials",
-  chats: "maxbridge.chats",
+  chat: "maxbridge.chat",
   messages: "maxbridge.messages",
-  activeChatId: "maxbridge.activeChatId",
 };
 
 export function load<T>(key: string, fallback: T): T {

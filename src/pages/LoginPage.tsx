@@ -4,7 +4,7 @@ import { useChat } from "../context/chatContext";
 import "./AuthPage.css";
 
 function LoginPage() {
-  const { isAuthorized, chats, login } = useChat();
+  const { isAuthorized, chat, login } = useChat();
 
   const [idInstance, setIdInstance] = useState("");
   const [apiTokenInstance, setApiTokenInstance] = useState("");
@@ -13,8 +13,8 @@ function LoginPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isAuthorized) navigate(chats.length ? "/chat" : "/create-chat", { replace: true });
-  }, [chats.length, isAuthorized, navigate]);
+    if (isAuthorized) navigate(chat ? "/chat" : "/create-chat", { replace: true });
+  }, [chat, isAuthorized, navigate]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

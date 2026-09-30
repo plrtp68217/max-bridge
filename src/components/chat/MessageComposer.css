@@ -9,7 +9,7 @@
   display: flex;
   align-items: flex-end;
   gap: 6px;
-  padding: 6px 6px 6px 10px;
+  padding: 6px 6px 6px 14px;
   border-radius: 22px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -27,17 +27,6 @@
 
 .composer__field textarea::placeholder {
   color: var(--text-secondary);
-}
-
-.composer__icon {
-  display: flex;
-  padding: 8px 4px;
-  color: var(--text-secondary);
-}
-
-.composer__icon:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 
 .composer__send {

@@ -5,7 +5,7 @@ import { useChat } from "../context/chatContext";
 import "./AuthPage.css";
 
 function CreateChatPage() {
-  const { createChat, chats } = useChat();
+  const { startChat, chat } = useChat();
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,7 +23,7 @@ function CreateChatPage() {
     setError("");
     setLoading(true);
     try {
-      await createChat(digits);
+      await startChat(digits);
       navigate("/chat");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось проверить номер");
@@ -34,12 +34,12 @@ function CreateChatPage() {
   return (
     <main className="auth">
       <form className="auth__card" onSubmit={handleSubmit}>
-        {chats.length > 0 && (
+        {chat && (
           <button
             type="button"
             className="auth__back"
             onClick={() => navigate("/chat")}
-            aria-label="Назад к чатам"
+            aria-label="Назад к чату"
           >
             <BackIcon />
           </button>

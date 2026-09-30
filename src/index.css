@@ -1,7 +1,6 @@
 :root {
   /* Палитра снята с тёмной темы MAX */
   --bg-app: #0d0d12;
-  --bg-rail: #121218;
   --bg-sidebar: #17171e;
   --bg-chat: #0f0f15;
   --bg-header: #17171ecc;
@@ -30,8 +29,6 @@
   --radius-lg: 18px;
   --radius-full: 999px;
 
-  --sidebar-width: 380px;
-  --rail-width: 72px;
 
   color-scheme: dark;
 }

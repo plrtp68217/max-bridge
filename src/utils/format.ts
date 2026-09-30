@@ -37,11 +37,6 @@ const dayWithYearFormatter = new Intl.DateTimeFormat("ru-RU", {
   year: "numeric",
 });
 
-const shortDayFormatter = new Intl.DateTimeFormat("ru-RU", {
-  day: "numeric",
-  month: "short",
-});
-
 export function formatTime(timestamp: number): string {
   return timeFormatter.format(timestamp);
 }
@@ -63,14 +58,6 @@ export function formatDayDivider(timestamp: number): string {
   return date.getFullYear() === new Date().getFullYear()
     ? dayFormatter.format(date)
     : dayWithYearFormatter.format(date);
-}
-
-/** Время последнего сообщения в списке чатов. */
-export function formatChatListTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  const today = startOfDay(new Date());
-
-  return startOfDay(date) === today ? timeFormatter.format(date) : shortDayFormatter.format(date);
 }
 
 export function isSameDay(a: number, b: number): boolean {

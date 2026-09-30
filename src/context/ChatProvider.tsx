@@ -22,19 +22,21 @@ function extractText(data: MessageData): { text: string; unsupported?: boolean }
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [credentials, setCredentials] = useState(() => load<Credentials | null>(KEYS.credentials, null));
-  const [chats, setChats] = useState(() => load<Chat[]>(KEYS.chats, []));
-  const [messages, setMessages] = useState(() => load<Record<string, ChatMessage[]>>(KEYS.messages, {}));
-  const [activeChatId, setActiveChatId] = useState(() => load(KEYS.activeChatId, ""));
+  const [chat, setChat] = useState(() => load<Chat | null>(KEYS.chat, null));
+  const [messages, setMessages] = useState(() => {
+    // Прошлая версия хранила здесь объект «чат → сообщения»
+    const saved = load<ChatMessage[]>(KEYS.messages, []);
+    return Array.isArray(saved) ? saved : [];
+  });
   const [connection, setConnection] = useState<ConnectionStatus>("connecting");
 
-  // Цикл опроса живёт дольше одного рендера — актуальный чат читает через ref
-  const activeChatIdRef = useRef(activeChatId);
+  // Цикл опроса живёт дольше одного рендера — текущий чат читает через ref
+  const chatIdRef = useRef(chat?.id);
 
   useEffect(() => {
-    activeChatIdRef.current = activeChatId;
-    save(KEYS.activeChatId, activeChatId);
-  }, [activeChatId]);
-  useEffect(() => save(KEYS.chats, chats), [chats]);
+    chatIdRef.current = chat?.id;
+    save(KEYS.chat, chat);
+  }, [chat]);
   useEffect(() => save(KEYS.messages, messages), [messages]);
 
   /* ---------- Получение уведомлений ---------- */
@@ -45,13 +47,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const handle = (body: WebhookBody) => {
       if (body.typeWebhook === "outgoingMessageStatus") {
         const status = body.status as MessageStatus;
-        if (!body.chatId || !["sent", "delivered", "read"].includes(status)) return;
+        if (body.chatId !== chatIdRef.current || !["sent", "delivered", "read"].includes(status)) return;
 
         setMessages((prev) => {
-          const list = prev[body.chatId!];
-          const target = list?.find((m) => m.id === body.idMessage);
+          const target = prev.find((m) => m.id === body.idMessage);
           if (!target || STATUS_ORDER.indexOf(status) <= STATUS_ORDER.indexOf(target.status)) return prev;
-          return { ...prev, [body.chatId!]: list.map((m) => (m === target ? { ...m, status } : m)) };
+          return prev.map((m) => (m === target ? { ...m, status } : m));
         });
         return;
       }
@@ -61,27 +62,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (!incoming && body.typeWebhook !== "outgoingMessageReceived") return;
 
       const { senderData: sender, messageData, idMessage } = body;
-      // Отрицательный chatId — групповой чат, их не поддерживаем
-      if (!sender || !messageData || !idMessage || sender.chatId.startsWith("-")) return;
+      // Показываем только переписку с текущим собеседником
+      if (!sender || !messageData || !idMessage || sender.chatId !== chatIdRef.current) return;
 
-      const chatId = sender.chatId;
       const { text, unsupported } = extractText(messageData);
       if (!text) return;
 
-      const unread = incoming && activeChatIdRef.current !== chatId ? 1 : 0;
-      setChats((prev) => {
-        if (!prev.some((c) => c.id === chatId)) {
-          const name = sender.chatName || sender.senderName || chatId;
-          return [...prev, { id: chatId, name, createdAt: Date.now(), unreadCount: unread }];
-        }
-        return unread
-          ? prev.map((c) => (c.id === chatId ? { ...c, unreadCount: c.unreadCount + 1 } : c))
-          : prev;
-      });
-
       const message: ChatMessage = {
         id: idMessage,
-        chatId,
         direction: incoming ? "incoming" : "outgoing",
         text,
         timestamp: body.timestamp * 1000,
@@ -89,11 +77,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         unsupported,
       };
 
-      setMessages((prev) => {
-        const list = prev[chatId] ?? [];
-        if (list.some((m) => m.id === message.id)) return prev;
-        return { ...prev, [chatId]: [...list, message].sort((a, b) => a.timestamp - b.timestamp) };
-      });
+      setMessages((prev) =>
+        prev.some((m) => m.id === message.id)
+          ? prev
+          : [...prev, message].sort((a, b) => a.timestamp - b.timestamp),
+      );
     };
 
     const controller = new AbortController();
@@ -134,55 +122,30 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     clearAll();
     setCredentials(null);
-    setChats([]);
-    setMessages({});
-    setActiveChatId("");
+    setChat(null);
+    setMessages([]);
   };
 
-  const openChat = (chatId: string) => {
-    setActiveChatId(chatId);
-    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, unreadCount: 0 } : c)));
-  };
-
-  const createChat = async (phone: string) => {
+  const startChat = async (phone: string) => {
     const chatId = await checkAccount(credentials!, phone);
     if (!chatId) throw new Error("Этот номер не зарегистрирован в MAX");
 
-    setChats((prev) =>
-      prev.some((c) => c.id === chatId)
-        ? prev
-        : [...prev, { id: chatId, name: formatPhone(phone), createdAt: Date.now(), unreadCount: 0 }],
-    );
-    openChat(chatId);
-  };
-
-  const removeChat = (chatId: string) => {
-    setChats((prev) => prev.filter((c) => c.id !== chatId));
-    setMessages((prev) => {
-      const next = { ...prev };
-      delete next[chatId];
-      return next;
-    });
-    if (activeChatId === chatId) setActiveChatId("");
+    // История хранится только для одного собеседника
+    if (chatId !== chat?.id) setMessages([]);
+    setChat({ id: chatId, name: formatPhone(phone) });
   };
 
   const sendText = async (text: string) => {
-    const chatId = activeChatId;
+    const chatId = chat!.id;
     // Оптимистичное сообщение: показываем сразу, id заменим ответом сервера
     const localId = `local-${Date.now()}`;
     const update = (patch: Partial<ChatMessage>) =>
-      setMessages((prev) => ({
-        ...prev,
-        [chatId]: prev[chatId].map((m) => (m.id === localId ? { ...m, ...patch } : m)),
-      }));
+      setMessages((prev) => prev.map((m) => (m.id === localId ? { ...m, ...patch } : m)));
 
-    setMessages((prev) => ({
+    setMessages((prev) => [
       ...prev,
-      [chatId]: [
-        ...(prev[chatId] ?? []),
-        { id: localId, chatId, direction: "outgoing", text, timestamp: Date.now(), status: "pending" },
-      ],
-    }));
+      { id: localId, direction: "outgoing", text, timestamp: Date.now(), status: "pending" },
+    ]);
 
     try {
       update({ id: await sendMessage(credentials!, chatId, text), status: "sent" });
@@ -191,21 +154,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const lastActivity = (chat: Chat) => messages[chat.id]?.at(-1)?.timestamp ?? chat.createdAt;
-
   return (
     <ChatContext.Provider
       value={{
         isAuthorized: credentials !== null,
-        chats: [...chats].sort((a, b) => lastActivity(b) - lastActivity(a)),
+        chat,
         messages,
-        activeChat: chats.find((c) => c.id === activeChatId) ?? null,
         connection,
         login,
         logout,
-        openChat,
-        createChat,
-        removeChat,
+        startChat,
         sendText,
       }}
     >

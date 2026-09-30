@@ -1,0 +1,39 @@
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.messages__inner {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 16px 20px 8px;
+}
+
+.messages__placeholder {
+  margin: 48px auto;
+  max-width: 420px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  background: #00000059;
+  backdrop-filter: blur(6px);
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 14px;
+}
+
+.messages__divider {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0 12px;
+}
+
+.messages__divider span {
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  background: #00000059;
+  backdrop-filter: blur(6px);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}

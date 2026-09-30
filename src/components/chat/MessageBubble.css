@@ -1,0 +1,74 @@
+.bubble-row {
+  display: flex;
+  margin-bottom: 2px;
+}
+
+.bubble-row--tail {
+  margin-bottom: 10px;
+}
+
+.bubble-row--in {
+  justify-content: flex-start;
+}
+
+.bubble-row--out {
+  justify-content: flex-end;
+}
+
+.bubble {
+  position: relative;
+  max-width: min(560px, 74%);
+  padding: 7px 12px 7px 12px;
+  border-radius: var(--radius-lg);
+  font-size: 15px;
+  /* Метка времени «обтекается» текстом, как в MAX */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 4px 8px;
+  box-shadow: 0 1px 2px #0000002e;
+}
+
+.bubble-row--in .bubble {
+  background: var(--bubble-in);
+  border-bottom-left-radius: var(--radius-lg);
+}
+
+.bubble-row--out .bubble {
+  background: var(--bubble-out);
+  color: var(--text-on-accent);
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+.bubble-row--in.bubble-row--tail .bubble {
+  border-bottom-left-radius: 6px;
+}
+
+.bubble-row--out.bubble-row--tail .bubble {
+  border-bottom-right-radius: 6px;
+}
+
+.bubble__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bubble__text--muted {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.bubble__meta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+.bubble-row--out .bubble__meta {
+  opacity: 0.9;
+}

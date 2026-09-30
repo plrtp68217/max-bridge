@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260">
+  <g fill="none" stroke="#ffffff" stroke-opacity="0.045" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- планета -->
+    <circle cx="46" cy="42" r="15" />
+    <ellipse cx="46" cy="42" rx="25" ry="8" transform="rotate(-20 46 42)" />
+
+    <!-- звёзды -->
+    <path d="M124 30 l4 9 9 4 -9 4 -4 9 -4 -9 -9 -4 9 -4 z" />
+    <path d="M214 96 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z" />
+    <path d="M60 176 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3 z" />
+
+    <!-- комета -->
+    <circle cx="196" cy="36" r="7" />
+    <path d="M186 46 l-16 14 M190 52 l-10 9" />
+
+    <!-- ракета -->
+    <path d="M132 118 c10 -12 22 -16 30 -16 0 8 -4 20 -16 30 l-9 3 -8 -8 z" />
+    <path d="M137 135 l-8 10 M146 144 l10 -8" />
+
+    <!-- орбита -->
+    <circle cx="44" cy="112" r="6" />
+    <circle cx="210" cy="196" r="13" />
+    <ellipse cx="210" cy="196" rx="22" ry="7" transform="rotate(25 210 196)" />
+
+    <!-- созвездие -->
+    <path d="M96 208 l22 -12 18 16 24 -8" />
+    <circle cx="96" cy="208" r="2.5" />
+    <circle cx="118" cy="196" r="2.5" />
+    <circle cx="136" cy="212" r="2.5" />
+    <circle cx="160" cy="204" r="2.5" />
+
+    <!-- спутник -->
+    <path d="M240 140 l-10 -10 M230 130 l-12 12 10 10 12 -12 z M218 142 l-10 10" />
+    <path d="M12 236 l8 -8 M20 244 l10 -10" />
+  </g>
+</svg>

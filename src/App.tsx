@@ -1,8 +1,12 @@
-import './App.css';
-import { AppRouter } from './router/AppRouter';
+import { ChatProvider } from "./context/ChatProvider";
+import { AppRouter } from "./router/AppRouter";
 
 function App() {
-  return <AppRouter/>;
+  return (
+    <ChatProvider>
+      <AppRouter />
+    </ChatProvider>
+  );
 }
 
 export default App;

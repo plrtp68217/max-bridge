@@ -1,0 +1,15 @@
+.ticks {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.75;
+}
+
+.ticks--read {
+  opacity: 1;
+  color: #ffffff;
+}
+
+.ticks--failed {
+  opacity: 1;
+  color: var(--danger);
+}

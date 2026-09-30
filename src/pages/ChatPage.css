@@ -1,0 +1,24 @@
+.workspace {
+  height: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+/* На узких экранах показываем либо список чатов, либо сам чат */
+@media (max-width: 900px) {
+  .workspace {
+    flex-direction: column-reverse;
+  }
+
+  .workspace .chat-panel {
+    display: none;
+  }
+
+  .workspace--chat-open .sidebar {
+    display: none;
+  }
+
+  .workspace--chat-open .chat-panel {
+    display: flex;
+  }
+}

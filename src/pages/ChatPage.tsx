@@ -1,45 +1,27 @@
-import { useEffect, useState, type SubmitEvent } from "react";
-import { loadCredentials, loadChatId } from "../utils/storage";
-import { sendMessage } from "../api/greenapi";
 import { useNavigate } from "react-router-dom";
+import { ChatPanel } from "../components/chat/ChatPanel";
+import { NavRail } from "../components/sidebar/NavRail";
+import { Sidebar } from "../components/sidebar/Sidebar";
+import { useChat } from "../hooks/useChat";
 import { ROUTES } from "../router/paths";
+import "./ChatPage.css";
 
 function ChatPage() {
+  const { logout, activeChatId } = useChat();
   const navigate = useNavigate();
-  const [credentials] = useState(loadCredentials);
-  const [chatId] = useState(loadChatId);
-  const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    if (!credentials.idInstance || !credentials.apiTokenInstance || !chatId) {
-      navigate(ROUTES.LOGIN, { replace: true });
-    }
-  }, [credentials, chatId, navigate]);
-
-  const handleSend = async (event: SubmitEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!message.trim()) return;
-
-    await sendMessage(credentials, {chatId, message});
-
-    console.log("Отправлено сообщение: " + message + ` [${chatId}]`);
-    
-    setMessage("");
-  }
+  const handleLogout = () => {
+    logout();
+    navigate(ROUTES.LOGIN, { replace: true });
+  };
 
   return (
-    <>
-      <form onSubmit={handleSend}>
-        <input 
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Введите сообщение"
-        />
-        <button type="submit">Отправить</button>
-      </form>
-    </>
-  )
+    <div className={`workspace${activeChatId ? " workspace--chat-open" : ""}`}>
+      <NavRail onLogout={handleLogout} />
+      <Sidebar />
+      <ChatPanel />
+    </div>
+  );
 }
 
 export default ChatPage;

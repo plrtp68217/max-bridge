@@ -1,0 +1,27 @@
+.chat-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-chat);
+  background-image: url("/chat-pattern.svg");
+  background-size: 260px 260px;
+}
+
+.chat-panel--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-panel__stub {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 26px;
+  border-radius: var(--radius-lg);
+  background: #00000059;
+  backdrop-filter: blur(6px);
+  color: var(--text-secondary);
+  font-size: 14px;
+}

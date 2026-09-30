@@ -1,39 +1,96 @@
-import type { 
-  Credentials, 
-  SendMessageRequest, 
+import type {
+  Credentials,
+  DeleteNotificationResponse,
+  Notification,
+  SendMessageRequest,
   SendMessageResponse,
-  ReceiveNotificationResponse,
-  DeleteNotificationResponse
+  StateInstanceResponse,
 } from "../utils/types";
 
 const BASE_URL = "https://api.green-api.com";
 
-export async function sendMessage(credentials: Credentials, messageRequest: SendMessageRequest): Promise<SendMessageResponse> {
-  const response = await fetch(
-    `${BASE_URL}/waInstance${credentials.idInstance}/sendMessage/${credentials.apiTokenInstance}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(messageRequest),
-    }
-  );
+export class GreenApiError extends Error {
+  readonly status: number;
 
-  return response.json() as Promise<SendMessageResponse>;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "GreenApiError";
+    this.status = status;
+  }
 }
 
-export async function receiveNotification(credentials: Credentials, receiveTimeout: number = 5): Promise<ReceiveNotificationResponse> {
-  const response = await fetch(
-    `${BASE_URL}/waInstance${credentials.idInstance}/receiveNotification/${credentials.apiTokenInstance}?receiveTimeout=${receiveTimeout}`,
-  );
-
-  return response.json() as Promise<ReceiveNotificationResponse>;
+function methodUrl(credentials: Credentials, method: string, path = ""): string {
+  return `${BASE_URL}/waInstance${credentials.idInstance}/${method}/${credentials.apiTokenInstance}${path}`;
 }
 
-export async function deleteNotification(credentials: Credentials, receiptId: number): Promise<DeleteNotificationResponse> {
-  const response = await fetch(
-    `${BASE_URL}/waInstance${credentials.idInstance}/deleteNotification/${credentials.apiTokenInstance}/${receiptId}`,
-    { method: "DELETE" }
-  );
+/**
+ * Обёртка над fetch: приводит HTTP-ошибки к GreenApiError и разбирает тело,
+ * которое у GREEN-API может быть пустым (например, у receiveNotification).
+ */
+async function request<T>(url: string, init?: RequestInit): Promise<T | null> {
+  const response = await fetch(url, init);
 
-  return response.json() as Promise<DeleteNotificationResponse>;
+  const raw = await response.text();
+
+  if (!response.ok) {
+    throw new GreenApiError(
+      raw || `Запрос завершился с кодом ${response.status}`,
+      response.status,
+    );
+  }
+
+  if (!raw.trim()) return null;
+
+  return JSON.parse(raw) as T;
+}
+
+export async function sendMessage(
+  credentials: Credentials,
+  messageRequest: SendMessageRequest,
+): Promise<SendMessageResponse> {
+  const result = await request<SendMessageResponse>(methodUrl(credentials, "sendMessage"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(messageRequest),
+  });
+
+  if (!result?.idMessage) {
+    throw new GreenApiError("Сервер не вернул идентификатор сообщения", 200);
+  }
+
+  return result;
+}
+
+/**
+ * Длинный опрос очереди входящих уведомлений.
+ * Возвращает null, если за время receiveTimeout ничего не пришло.
+ */
+export async function receiveNotification(
+  credentials: Credentials,
+  receiveTimeout = 10,
+  signal?: AbortSignal,
+): Promise<Notification | null> {
+  return request<Notification>(
+    methodUrl(credentials, "receiveNotification", `?receiveTimeout=${receiveTimeout}`),
+    { signal },
+  );
+}
+
+/** Уведомление нужно удалить из очереди, иначе оно придёт повторно. */
+export async function deleteNotification(
+  credentials: Credentials,
+  receiptId: number,
+): Promise<DeleteNotificationResponse | null> {
+  return request<DeleteNotificationResponse>(
+    methodUrl(credentials, "deleteNotification", `/${receiptId}`),
+    { method: "DELETE" },
+  );
+}
+
+export async function getStateInstance(credentials: Credentials): Promise<StateInstanceResponse> {
+  const result = await request<StateInstanceResponse>(methodUrl(credentials, "getStateInstance"));
+
+  if (!result) throw new GreenApiError("Пустой ответ getStateInstance", 200);
+
+  return result;
 }

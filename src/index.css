@@ -1,9 +1,100 @@
+:root {
+  /* Палитра снята с тёмной темы MAX */
+  --bg-app: #0d0d12;
+  --bg-rail: #121218;
+  --bg-sidebar: #17171e;
+  --bg-chat: #0f0f15;
+  --bg-header: #17171ecc;
+  --bg-elevated: #1e1e27;
+  --bg-input: #22222c;
+  --bg-hover: #ffffff0a;
+  --bg-active: #262631;
+
+  --bubble-in: #262631;
+  --bubble-out: #7a5cf0;
+  --bubble-out-hi: #8b6bf5;
+
+  --text-primary: #f2f2f5;
+  --text-secondary: #8d8d9e;
+  --text-on-accent: #ffffff;
+
+  --accent: #7a5cf0;
+  --accent-hover: #8b6bf5;
+  --danger: #ef5a6f;
+  --online: #4bd07a;
+
+  --border: #ffffff12;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-full: 999px;
+
+  --sidebar-width: 380px;
+  --rail-width: 72px;
+
+  color-scheme: dark;
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html,
+body,
 #root {
-  height: 100vh;
+  height: 100%;
+}
+
+body {
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, Inter, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  background: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
+}
+
+/* Тонкие скроллбары, как в десктопном MAX */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff1f transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #ffffff1f;
+  border-radius: var(--radius-full);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #ffffff33;
 }

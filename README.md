@@ -1,75 +1,79 @@
-# React + TypeScript + Vite
+# max-bridge
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Веб-мессенджер на GREEN-API: отправка и получение текстовых сообщений в интерфейсе,
+повторяющем тёмную тему MAX.
 
-Currently, two official plugins are available:
+## Запуск
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Приложение откроется на `http://localhost:5173`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+1. На экране входа введите `idInstance` и `apiTokenInstance` из личного кабинета GREEN-API.
+2. Создайте чат, указав номер получателя в международном формате (`79001234567`).
+3. Отправляйте сообщения — ответы появятся в ленте автоматически.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Учётные данные, список чатов и история сообщений хранятся только в `localStorage` браузера.
+
+## Настройки инстанса
+
+Чтобы входящие сообщения доходили до приложения, в настройках инстанса должны быть включены
+уведомления (Инстанс → Настройки):
+
+| Настройка                   | Значение |
+| --------------------------- | -------- |
+| `incomingWebhook`           | `yes`    |
+| `outgoingMessageWebhook`    | `yes`    |
+| `outgoingAPIMessageWebhook` | `yes`    |
+| `stateWebhook`              | `yes`    |
+
+Адрес webhook-сервера указывать не нужно: приложение само забирает уведомления из очереди.
+
+## Как устроено получение сообщений
+
+У фронтенда нет своего бэкенда, поэтому вместо webhook-ов используется очередь уведомлений
+GREEN-API:
+
+1. `receiveNotification` с `receiveTimeout=10` держит HTTP-соединение открытым, пока
+   в очереди не появится уведомление (long polling) — это дешевле частых пустых запросов.
+2. Уведомление разбирается по `typeWebhook`:
+   - `incomingMessageReceived` — входящее сообщение;
+   - `outgoingMessageReceived` / `outgoingAPIMessageReceived` — исходящее (в том числе
+     отправленное с телефона, поэтому чат синхронизируется между устройствами);
+   - `outgoingMessageStatus` — статус доставки, рисует галочки у сообщения.
+3. `deleteNotification` удаляет обработанное уведомление: пока оно в очереди,
+   следующее не придёт.
+4. При сетевой ошибке цикл ждёт 5 секунд и повторяет попытку; статус соединения
+   виден в шапке списка чатов.
+
+Сообщения дедуплицируются по `idMessage`, поэтому собственное отправленное сообщение
+не задваивается, когда на него приходит уведомление.
+
+Отправка оптимистичная: сообщение появляется в ленте сразу со статусом «отправляется»
+и меняет статус на «отправлено» → «доставлено» → «прочитано» по мере прихода вебхуков.
+
+## Структура
 
 ```
+src/
+  api/greenapi.ts        методы GREEN-API и разбор ответов
+  context/               ChatProvider: состояние чатов и цикл получения уведомлений
+  hooks/useChat.ts       доступ к контексту
+  components/sidebar/    панель навигации, список чатов, поиск
+  components/chat/       шапка чата, лента сообщений, поле ввода
+  pages/                 вход, создание чата, основной экран
+  router/                маршруты и защита приватных страниц
+  utils/                 типы, работа с localStorage, форматирование
+```
+
+## Ограничения
+
+Поддерживаются только личные чаты (`@c.us`) и только текстовые сообщения — остальные типы
+отображаются заглушкой. Групповые чаты, вложения, звонки и реакции вне задачи.
+
+## Стек
+
+React 19, TypeScript, React Router, Vite. Внешних UI-библиотек нет — вёрстка и иконки свои.
